@@ -129,7 +129,7 @@ def _ans_get(b, p):
     p+=length
     return (fqdn_to_name(fqdn), type, cls, ttl, data), p
 
-def _nsclient():
+def nsclient():
     import socket
     client=socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     client.bind(('0.0.0.0', 0))        
@@ -142,7 +142,7 @@ def _nsclient():
 async def nslookup(name, server, type=TYPE_A, cls=CLASS_IN, client=None, timeout=2, retries=3):
     from asyncio import sleep_ms
     if not client:
-        client=_nsclient()
+        client=nsclient()
     # make request
     req=bytearray()
     req.extend(__import__('os').urandom(2)) # 2 random bytes
@@ -159,13 +159,13 @@ async def nslookup(name, server, type=TYPE_A, cls=CLASS_IN, client=None, timeout
             client.sendto(req, (server, 53))        
         try:
             # maybe it's the best way for UDP transmission that does not require high response speed
-            sleep_ms(300)
+            await sleep_ms(300)
             t+=300
             resp=client.recv(1024)
             if len(resp)>12 and resp[0]==req[0] and resp[1]==req[1] \
                and resp[2]&0x80 and resp[3]&0x0f==0:
                 break
-        except OSError:
+        except OSError as e:
             pass
         if t>timeout:
             t=0
@@ -198,14 +198,15 @@ async def nslookup(name, server, type=TYPE_A, cls=CLASS_IN, client=None, timeout
 
 
 # return list of (family, type, proto, canonname, sockaddr) like socket.getaddrinfo()
-async def getaddrinfo(host, port, af=0, type=0, proto=0, flags=0, *, server=None):
+async def getaddrinfo(host, port, af=0, type=0, proto=0, flags=0, *, server=None, client=None):
     from socket import AF_INET
     if af and af!=AF_INET:
         raise OSError(-202)
     host=host.strip()
     if all(t.isdigit() for t in host.split('.')):
         return [(AF_INET, type, proto, host, (host, port)), ]
-    client=_nsclient()
+    if not client:
+        client=nsclient()
     if not server:
         import network
         sta=network.WLAN(network.STA_IF)
